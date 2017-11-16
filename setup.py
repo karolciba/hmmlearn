@@ -17,6 +17,7 @@ except ImportError:
         return {}
 
 from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
 
 
 DISTNAME = "hmmlearn"
@@ -52,6 +53,29 @@ docs_require = install_requires + [
     "Sphinx", "sphinx-gallery", "numpydoc", "Pillow", "matplotlib"
 ]
 
+
+copt = {
+    'msvc': ['/openmp'],
+    'mingw32' : ['-fopenmp'],
+    'unix': ['-fopenmp', '-O3']
+}
+lopt = {
+    'mingw32' : ['-fopenmp'],
+    'unix': ['-fopenmp']
+}
+
+# source https://gist.github.com/mindw/7941801
+class build_ext_subclass(build_ext):
+    def build_extensions(self):
+        c = self.compiler.compiler_type
+        if c in copt:
+           for e in self.extensions:
+               e.extra_compile_args += copt[c]
+        if c in lopt:
+           for e in self.extensions:
+               e.extra_link_args += lopt[c]
+        build_ext.build_extensions(self)
+
 setup_options = dict(
     name="hmmlearn",
     version=VERSION,
@@ -65,10 +89,11 @@ setup_options = dict(
     classifiers=CLASSIFIERS,
     ext_modules=[
         Extension("hmmlearn._hmmc", ["hmmlearn/_hmmc.c"],
-                  extra_compile_args=["-O3", "-fopenmp"],
-                  extra_link_args=['-fopenmp'],
+                    extra_compile_args=['-O3', '-fopenmp'],
+                    extra_link_args=['-fopenmp'],
                   **get_info("npymath"))
     ],
+    # cmdclass = {'build_ext': build_ext_subclass},
     install_requires=install_requires,
     tests_require=tests_require,
     extras_require={

@@ -252,8 +252,10 @@ class GaussianHMM(_BaseHMM):
         # p. 443 - 445
         denom = stats['post'][:, np.newaxis]
         if 'm' in self.params:
+            denom[np.isnan(denom)] = 0
             self.means_ = ((means_weight * means_prior + stats['obs'])
-                           / (means_weight + denom))
+                       / (means_weight + denom))
+            # print(self.means_)
 
         if 'c' in self.params:
             covars_prior = self.covars_prior

@@ -5,6 +5,7 @@ from numpy.math cimport expl, logl, log1pl, isinf, fabsl, INFINITY
 
 import numpy as np
 cimport openmp
+from libc.stdio cimport printf
 
 ctypedef double dtype_t
 
@@ -50,24 +51,19 @@ def _forward(int n_samples, int n_components,
              dtype_t[:, :] framelogprob,
              dtype_t[:, :] fwdlattice):
 
-    cdef int t, i, j
+    cdef int t, i, ii, j
     cdef dtype_t[:, ::view.contiguous] work_buffer = np.empty((n_components,n_components))
 
     # prepare memory continous view on transmat to better utilize processor cache
     cdef dtype_t[::1, :] log_transmat_trans = log_transmat.copy_fortran()
 
-    # loop will be paralelized for each componenet
-    # threads should not compete over them
-    num_threads = openmp.omp_get_num_threads()
-    if  num_threads > n_components:
-        num_threads = n_components
-
     with nogil:
-        for i in range(n_components):
-            fwdlattice[0, i] = log_startprob[i] + framelogprob[0, i]
+        for ii in range(n_components):
+            fwdlattice[0, ii] = log_startprob[ii] + framelogprob[0, ii]
 
         for t in range(1, n_samples):
-            for j in prange(n_components, schedule = 'static', num_threads = num_threads):
+            # for j in prange(n_components, schedule = 'static', num_threads = num_threads):
+            for j in prange(n_components, schedule = 'static'):
                 for i in range(n_components):
                     work_buffer[j, i] = fwdlattice[t - 1, i] + log_transmat_trans[i, j]
 
@@ -79,21 +75,16 @@ def _backward(int n_samples, int n_components,
               dtype_t[:, :] framelogprob,
               dtype_t[:, :] bwdlattice):
 
-    cdef int t, i, j
+    cdef int t, i, ii, j
     cdef dtype_t[:, ::view.contiguous] work_buffer = np.empty((n_components,n_components))
 
-    # loop will be paralelized for each componenet
-    # threads should not compete over them
-    num_threads = openmp.omp_get_num_threads()
-    if  num_threads > n_components:
-        num_threads = n_components
-
     with nogil:
-        for i in range(n_components):
-            bwdlattice[n_samples - 1, i] = 0.0
+        for ii in range(n_components):
+            bwdlattice[n_samples - 1, ii] = 0.0
 
         for t in range(n_samples - 2, -1, -1):
-            for j in prange(n_components, schedule = 'static', num_threads = num_threads):
+            # for j in prange(n_components, schedule = 'static', num_threads = num_threads):
+            for j in prange(n_components, schedule = 'static'):
                 for i in range(n_components):
                     work_buffer[j,i] = (log_transmat[j, i]
                                       + framelogprob[t + 1, i]
@@ -107,20 +98,15 @@ def _compute_log_xi_sum(int n_samples, int n_components,
                         dtype_t[:, :] framelogprob,
                         dtype_t[:, :] log_xi_sum):
 
-    cdef int t, i, j
+    cdef int t, i, ii, j, jj
     cdef dtype_t[:, ::view.contiguous] work_buffer = \
         np.full((n_components, n_components), -INFINITY)
     cdef dtype_t logprob = _logsumexp(fwdlattice[n_samples - 1])
 
-    # loop will be paralelized for each componenet
-    # threads should not compete over them
-    num_threads = openmp.omp_get_num_threads()
-    if  num_threads > n_components:
-        num_threads = n_components
-
     with nogil:
         for t in range(n_samples - 1):
-            for i in prange(n_components, schedule = 'static', num_threads = num_threads):
+            # for i in prange(n_components, schedule = 'static', num_threads = num_threads):
+            for i in prange(n_components, schedule = 'static'):
                 for j in range(n_components):
                     work_buffer[i, j] = (fwdlattice[t, i]
                                          + log_transmat[i, j]
@@ -128,10 +114,11 @@ def _compute_log_xi_sum(int n_samples, int n_components,
                                          + bwdlattice[t + 1, j]
                                          - logprob)
 
-            for i in prange(n_components, schedule = 'static', num_threads = num_threads):
-                for j in range(n_components):
-                    log_xi_sum[i, j] = _logaddexp(log_xi_sum[i, j],
-                                                  work_buffer[i, j])
+            # for i in prange(n_components, schedule = 'static', num_threads = num_threads):
+            for ii in prange(n_components, schedule = 'static'):
+                for jj in range(n_components):
+                    log_xi_sum[ii, jj] = _logaddexp(log_xi_sum[ii, jj],
+                                                  work_buffer[ii, jj])
 
 
 def _viterbi(int n_samples, int n_components,

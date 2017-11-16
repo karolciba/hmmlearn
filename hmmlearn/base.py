@@ -3,6 +3,7 @@ from __future__ import print_function
 import string
 import sys
 from collections import deque
+import datetime
 
 import numpy as np
 from scipy.misc import logsumexp
@@ -79,7 +80,7 @@ class ConvergenceMonitor(object):
             delta = logprob - self.history[-1] if self.history else np.nan
             message = self._template.format(
                 iter=self.iter + 1, logprob=logprob, delta=delta)
-            print(message, file=sys.stderr)
+            print(datetime.datetime.now(), message, file=sys.stderr)
 
         self.history.append(logprob)
         self.iter += 1
@@ -90,7 +91,7 @@ class ConvergenceMonitor(object):
         # XXX we might want to check that ``logprob`` is non-decreasing.
         return (self.iter == self.n_iter or
                 (len(self.history) == 2 and
-                 self.history[1] - self.history[0] < self.tol))
+                 abs(self.history[1] - self.history[0]) < self.tol))
 
 
 class _BaseHMM(BaseEstimator):
@@ -438,9 +439,20 @@ class _BaseHMM(BaseEstimator):
                     stats, X[i:j], framelogprob, posteriors, fwdlattice,
                     bwdlattice)
 
+            # print("Before M step")
+            # print(self.transmat_)
+            # print(self.startprob_)
+            # print(self.means_)
+            # print(self._covars_)
+
             # XXX must be before convergence check, because otherwise
             #     there won't be any updates for the case ``n_iter=1``.
             self._do_mstep(stats)
+            # print("After M step")
+            # print(self.transmat_)
+            # print(self.startprob_)
+            # print(self.means_)
+            # print(self._covars_)
 
             self.monitor_.report(curr_logprob)
             if self.monitor_.converged:
@@ -639,13 +651,25 @@ class _BaseHMM(BaseEstimator):
         """
         # The ``np.where`` calls guard against updating forbidden states
         # or transitions in e.g. a left-right HMM.
+        eps = 2e-290
+        # eps = 0.001
         if 's' in self.params:
             startprob_ = self.startprob_prior - 1.0 + stats['start']
+            #TODO: possible drift ? - this doens't help
+            # when numerical accuracy falls to zero - and you can't
+            # get out the state that has 0 probability
+            startprob_ = np.where(startprob_ <= eps, eps, startprob_)
+            startprob_ = np.where(startprob_ >= 1-eps, 1-eps, startprob_)
             self.startprob_ = np.where(self.startprob_ == 0.0,
                                        self.startprob_, startprob_)
             normalize(self.startprob_)
         if 't' in self.params:
             transmat_ = self.transmat_prior - 1.0 + stats['trans']
+            #TODO: possible drift ? - this doens't help
+            # when numerical accuracy falls to zero - and you can't
+            # get out the state that has 0 probability
+            transmat_ = np.where(transmat_ <= eps, eps, transmat_)
+            transmat_ = np.where(transmat_ >= 1-eps, 1-eps, transmat_)
             self.transmat_ = np.where(self.transmat_ == 0.0,
                                       self.transmat_, transmat_)
             normalize(self.transmat_, axis=1)
