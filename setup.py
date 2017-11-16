@@ -65,7 +65,8 @@ setup_options = dict(
     classifiers=CLASSIFIERS,
     ext_modules=[
         Extension("hmmlearn._hmmc", ["hmmlearn/_hmmc.c"],
-                  extra_compile_args=["-O3"],
+                  extra_compile_args=["-O3", "-fopenmp"],
+                  extra_link_args=['-fopenmp'],
                   **get_info("npymath"))
     ],
     install_requires=install_requires,
